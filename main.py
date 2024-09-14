@@ -46,6 +46,9 @@ oauth_2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 app = FastAPI()
 
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
 @app.post('/create/')
 async def create(data: Data):
     return{"data" : data}
