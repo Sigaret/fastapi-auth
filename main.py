@@ -10,15 +10,13 @@ SECRET_KEY = "b1d4733aa6daf70e186e2131b74452ab13e847821c5cedc637336db5ee01e49c"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-
-
-dumy_db = {
-    'jon' : {
-        'username' : 'jon',
-        'full_name' : 'John Canada',
-        'email' : 'joh@mail.com',
-        'hashed_password' : '',
-        'disable' : False
+db = {
+    'jon': {
+        'username': 'jon',
+        'full_name': 'John Canada',
+        'email': 'joh@mail.com',
+        'hashed_password': '$2b$12$j8pkDMUj9MGCY187D4JjvuhWZL7dYjtDsjwio3s/F3MIvNbvv3.Du',
+        'disable': False
     }
 }
 
@@ -26,22 +24,22 @@ class Data(BaseModel):
     name: str
 
 class Token(BaseModel):
-    access_token : str
-    toke_type : str
+    access_token: str
+    token_type: str
 
 class TokenData(BaseModel):
-    username : Optional[str] = Field(default=None)
+    username: Optional[str] = Field(default=None)
 
 class User(BaseModel):
-    username : str 
-    email : Optional[str] = Field(default=None)
-    full_name : Optional[str] = Field(default=None)
-    disable : Optional[str] = Field(default=None)
+    username: str 
+    email: Optional[str] = Field(default=None)
+    full_name: Optional[str] = Field(default=None)
+    disable: Optional[bool] = Field(default=None)  # Change to Optional[bool]
 
 class UserInDB(User):
-    hashed_password : str
+    hashed_password: str
 
-pwd_context =  CryptContext(schemes=['bcrypt'], deprecated='auto')
+pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 oauth_2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 app = FastAPI()
@@ -56,39 +54,39 @@ def get_user(db, username: str):
     if username in db:
         user_data = db[username]
         return UserInDB(**user_data)
-    
-def authenticate_user(db, username:str, password: str):
+
+
+def authenticate_user(db, username: str, password: str):
     user = get_user(db, username)
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
         return False
-    
     return user
 
-def create_access_token(data: dict, expires_delta : Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     
-    to_encode.update({"exp" : expire})
+    to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 async def get_current_user(token: str = Depends(oauth_2_scheme)):
-    credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Could Not validate Credential', headers={'WWW-Authenticate' : 'Bearer Token'})
+    credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Could Not validate Credential', headers={'WWW-Authenticate': 'Bearer'})
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username : str = payload.get('sub')
+        username: str = payload.get('sub')
         if username is None:
             raise credential_exception
         
         token_data = TokenData(username=username)
 
     except JWTError:
-        return credential_exception
+        raise credential_exception
     
     user = get_user(db, username=token_data.username)
     if user is None:
@@ -102,31 +100,21 @@ async def get_current_active_user(current_user: UserInDB = Depends(get_current_u
     
     return current_user
 
-@app.post('/token', response_model = Token)
+@app.post('/token', response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect username or password', headers={'WWW-Authenticate' : 'Bearer'})
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect username or password', headers={'WWW-Authenticate': 'Bearer'})
     
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={'sub' : user.username}, expires_delta=access_token_expires)
+    access_token = create_access_token(data={'sub': user.username}, expires_delta=access_token_expires)
 
-    return {'access_token' : access_token, 'token_type' :'bearer'}
+    return {'access_token': access_token, 'token_type': 'bearer'}
 
-
-@app.get('users/me/', response_model=User)
+@app.get('/users/me/', response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
 
-@app.get('users/me/items')
+@app.get('/users/me/items')
 async def read_own_items(current_user: User = Depends(get_current_active_user)):
-    return [{'item_id':1 , 'owner' : current_user}]
-
-
-@app.post('/create/')
-async def create(data: Data):
-    return{"data" : data}
-
-@app.get('/test/{item_id}/')
-async def test(item_id: str,query: int = 1):
-    return {"hello" : item_id}
+    return [{'item_id': 1, 'owner': current_user}]
